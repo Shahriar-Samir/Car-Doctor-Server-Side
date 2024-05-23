@@ -82,7 +82,6 @@ async function run() {
     })
     app.get('/myOrders', secure ,async (req,res)=>{
         const {email} = req.query
-        console.log(email)
         if(email === req.user.email){
           const result = await orderCollection.find({email}).toArray()
            return res.send(result)
