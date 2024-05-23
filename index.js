@@ -3,9 +3,32 @@ const cors = require('cors')
 const app = express()
 const port = process.env.PORT || 5000
 require('dotenv').config()
+const jwt = require('jsonwebtoken')
+const cookieParser = require('cookie-parser')
 
-app.use(cors())
+app.use(cors({
+    origin: [ 'http://localhost:5173','https://my-web-projects-d89ff.web.app','https://my-web-projects-d89ff.firebaseapp.com'],
+    credentials: true
+}))
 app.use(express.json())
+app.use(cookieParser())
+
+const secure  = (req,res,next)=>{
+      const token = req.cookies.jwt
+      if(!token){
+        return res.status(401).send('not authorized')
+      }
+      else{
+        jwt.verify(token, process.env.SECRET, (err,decoded)=>{
+            if(err){
+                return res.status(401).send('not authorized')
+            }
+            req.user = decoded
+            next()
+        })
+      }
+}
+
 
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const uri = `mongodb+srv://${process.env.USER}:${process.env.PASS}@database1.g36ghl5.mongodb.net/?retryWrites=true&w=majority&appName=database1`;
@@ -25,6 +48,22 @@ async function run() {
     // await client.connect();
 
 
+
+  
+
+    app.post('/jwt',async(req,res)=>{
+        const data = req.body
+        const token = jwt.sign(data,process.env.SECRET, {expiresIn: '1h'})
+        res.cookie('jwt', token, {httpOnly:true, sameSite: 'none', secure:true })
+        .send()
+    })
+    app.post('/logout',async(req,res)=>{
+        const user = req.body 
+        res
+        .clearCookie('jwt', {maxAge: 0, httpOnly: true,secure: true, sameSite: 'none'})
+        .send()
+    })
+
     app.get('/', (req,res)=>{
         res.send("Car Doctor Server Side")
     })
@@ -41,10 +80,16 @@ async function run() {
         const result = await orderCollection.find().toArray()
         res.send(result)
     })
-    app.get('/myOrders',async (req,res)=>{
+    app.get('/myOrders', secure ,async (req,res)=>{
         const {email} = req.query
-        const result = await orderCollection.find({email}).toArray()
-        res.send(result)
+        console.log(email)
+        if(email === req.user.email){
+          const result = await orderCollection.find({email}).toArray()
+           return res.send(result)
+        }
+        else{
+           return  res.status(403).send('Forbidden')
+        }
     })
 
     app.get('/services/:id',async (req,res)=>{
@@ -72,7 +117,7 @@ async function run() {
 
 
     // Send a ping to confirm a successful connection
-    await client.db("admin").command({ ping: 1 });
+    // await client.db("admin").command({ ping: 1 });
     console.log("Pinged your deployment. You successfully connected to MongoDB!");
   } finally {
     // Ensures that the client will close when you finish/error
